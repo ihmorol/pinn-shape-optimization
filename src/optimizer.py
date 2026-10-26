@@ -53,10 +53,13 @@ def run_optimization(cfg: dict, refs: dict, log=print) -> dict:
         opt = torch.optim.Adam([x], lr=float(cfg.get("lr", 0.06)))
 
         net = None
-        geo0 = RobotGeometry(design_from_flat(denormalize(torch.sigmoid(x))))
+        design_live = denormalize(torch.sigmoid(x))
+        geo_det = RobotGeometry(design_from_flat(design_live.detach()))
         if use_pinn:
             net = ThermalPINN()
-            net, _ = solve_thermal(net, geo0, steps=int(cfg.get("steps_init", 1200)))
+            net, _ = solve_thermal(net, geo_det,
+                                   steps=int(cfg.get("steps_init", 1200)),
+                                   lbfgs_steps=int(cfg.get("lbfgs_init", 200)))
 
         trace = []
         best_seed = None
@@ -64,10 +67,15 @@ def run_optimization(cfg: dict, refs: dict, log=print) -> dict:
             mu = mu0 * (mu1 / mu0) ** (it / max(1, outer - 1))
             design = denormalize(torch.sigmoid(x))
             geo = RobotGeometry(design_from_flat(design))
+            # rebuild the detached geometry every outer step: the warm PINN
+            # must train on the CURRENT shape, not the initial one
+            geo_det = RobotGeometry(design_from_flat(design.detach()))
             pens = objectives.penalties(geo)
             total_pen = sum(pens.values())
             if use_pinn:
-                net, _ = solve_thermal(net, geo,
+                # inner loop trains on detached geometry (leaves); the outer
+                # gradient flows through the fresh live-graph evaluation below
+                net, _ = solve_thermal(net, geo_det,
                                        steps=int(cfg.get("steps_warm", 220)),
                                        lr=1.2e-3)
                 th = thermal_metrics(net, geo)
@@ -83,16 +91,30 @@ def run_optimization(cfg: dict, refs: dict, log=print) -> dict:
             pen_val = float(total_pen.detach())
             trace.append({"iter": it, "J": j_clean, "pen": pen_val,
                           "mu": mu})
+            combined = j_clean + 100.0 * pen_val
             if pen_val < feas_tol and (best_seed is None
                                        or j_clean < best_seed["J"]):
-                best_seed = {"J": j_clean, "theta": [float(v) for v in
-                              denormalize(torch.sigmoid(x)).detach()],
-                             "iter": it}
+                best_seed = {"J": j_clean, "combined": combined,
+                             "theta": [float(v) for v in
+                                       denormalize(torch.sigmoid(x)).detach()],
+                             "iter": it, "feasible": True}
+            elif best_seed is not None and not best_seed.get("feasible") \
+                    and combined < best_seed["combined"]:
+                best_seed = {"J": j_clean, "combined": combined,
+                             "theta": [float(v) for v in
+                                       denormalize(torch.sigmoid(x)).detach()],
+                             "iter": it, "feasible": False}
+            elif best_seed is None:
+                best_seed = {"J": j_clean, "combined": combined,
+                             "theta": [float(v) for v in
+                                       denormalize(torch.sigmoid(x)).detach()],
+                             "iter": it, "feasible": False}
             if it % 10 == 0 or it == outer - 1:
                 log(f"  seed{seed} it{it:3d} J={j_clean:.4f} pen={pen_val:.2e} "
                     f"mu={mu:.1f}")
         if best_seed is not None and (best is None
-                                      or best_seed["J"] < best["J"]):
+                                      or best_seed["combined"]
+                                      < best["combined"]):
             best_seed["seed"] = seed
             best = best_seed
 
@@ -103,7 +125,8 @@ def run_optimization(cfg: dict, refs: dict, log=print) -> dict:
     if use_pinn:
         net = ThermalPINN()
         net, _ = solve_thermal(net, geo_b,
-                               steps=int(cfg.get("steps_final", 1500)))
+                               steps=int(cfg.get("steps_final", 1500)),
+                               lbfgs_steps=int(cfg.get("lbfgs_final", 200)))
         th = thermal_metrics(net, geo_b)
     m_b = objectives.evaluate(geo_b, th)
     best["metrics"] = {k: float(v) for k, v in m_b.items()}

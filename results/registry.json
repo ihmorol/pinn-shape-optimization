@@ -2,15 +2,21 @@
   "iter0_baseline": {
     "status": "baseline",
     "accepted": false,
+    "basis": "pinn",
     "J_opt": null,
     "improvement_pct": null,
-    "wall_s": 30.14025568962097
+    "wall_s": 71.58156085014343
   },
   "iter1_geomopt_fast": {
     "status": "optimize",
     "accepted": true,
+    "basis": "proxy",
     "J_opt": 0.8277875185012817,
     "improvement_pct": 17.221248149871826,
-    "wall_s": 6.5602076053619385
+    "wall_s": 6.523043870925903
+  },
+  "iter2_pinn_coopt": {
+    "status": "failed",
+    "wall_s": 320.0696392059326
   }
 }

@@ -1,0 +1,8 @@
+{
+  "name": "iter3_fdm_crossval",
+  "mode": "crossval",
+  "use_pinn": true,
+  "steps_final": 2500,
+  "lbfgs_final": 250,
+  "hypothesis": "Certification experiment: the shape-conditioned PINN field solution on the OPTIMIZED design agrees with the independent annular finite-volume solver within a few percent for every thermal metric, and the FDM-certified T_max reduction (optimized vs stock) confirms the optimization gain was physical, not a PINN artifact."
+}

@@ -1,22 +1,26 @@
-"""Independent finite-volume solver for the same thermal problem.
+"""Independent finite-volume solver for the same axisymmetric thermal problem.
 
-Cell-centred FV discretisation of
-    k Laplacian(T) + q''' = 0   with Robin -k dT/dn = h (T - T_inf)
-on the same (r, z) half cross-section, with a staircase approximation of the
-spline boundary (documented error source; fine grids keep it small). Used to
-verify the PINN field solution - the optimizer's gradients are only as
-trustworthy as the field solver.
+Cell-centred FV discretisation of the axisymmetric equation
+    k (T_rr + T_r/r + T_zz) + Q''' = 0,   -k dT/dn = h (T - T_inf)
+on the meridian half-plane with ANNULAR cells (volume 2 pi r dr dz, face
+areas 2 pi r dz / 2 pi r dr), so the r = 0 face has zero area (natural
+symmetry). The spline boundary is approximated as a staircase (documented
+error source; fine grids keep it small). Used to verify the PINN field
+solution - the optimizer's gradients are only as trustworthy as the field
+solver.
 """
 from __future__ import annotations
+
+import sys
+from pathlib import Path
 
 import numpy as np
 import torch
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import spsolve
 
-from .pinn_thermal import (H_EFF, K_CAV, K_PLA, SOURCES, T_INF, W_DEPTH,
-                           _source_z)
 from .geometry import profile_radius
+from .pinn_thermal import H_EFF, K_CAV, K_PLA, SOURCES, T_INF, _source_z
 
 
 def _profile_np(geo, n: int = 512):
@@ -30,14 +34,13 @@ def _profile_np(geo, n: int = 512):
 
 
 def fdm_thermal(geo, nr: int = 96, nz: int = 192) -> dict:
-    """Solve the thermal field with finite volumes; returns metric dict."""
+    """Solve the axisymmetric thermal field; returns metric dict (floats)."""
     z_p, r_p, r_in_p = _profile_np(geo)
     z_lo, z_hi = z_p[0], z_p[-1]
     r_max = r_p.max() * 1.001
     r_edges = np.linspace(0.0, r_max, nr + 1)
     z_edges = np.linspace(z_lo, z_hi, nz + 1)
-    dr = r_edges[1] - r_edges[0]
-    dz = z_edges[1] - z_edges[0]
+    dr, dz = r_edges[1] - r_edges[0], z_edges[1] - z_edges[0]
     rc = 0.5 * (r_edges[:-1] + r_edges[1:])
     zc = 0.5 * (z_edges[:-1] + z_edges[1:])
     r_at_z = np.interp(zc, z_p, r_p)
@@ -45,72 +48,72 @@ def fdm_thermal(geo, nr: int = 96, nz: int = 192) -> dict:
     mask = rc[None, :] <= r_at_z[:, None]          # (nz, nr)
     is_wall = rc[None, :] > r_in_at_z[:, None]
     k_cell = np.where(is_wall, K_PLA, K_CAV)
+    vol = 2.0 * np.pi * rc[None, :] * dr * dz      # annular cell volumes
 
-    # sources, normalised over the masked half domain (same measure as PINN)
-    q = np.zeros_like(k_cell)
+    # ring sources, normalized by integral phi 2 pi r dr dz
     RR, ZZ = np.meshgrid(rc, zc)
+    q_inj = np.zeros_like(k_cell)                  # W per cell
     for _, p, r_off, sr, sz, key in SOURCES:
         z_c = float(_source_z(key, geo))
         phi = np.exp(-(((RR - r_off) / sr) ** 2) - (((ZZ - z_c) / sz) ** 2))
         phi[~mask] = 0.0
-        q += (p / 2.0 / W_DEPTH) * phi / phi.sum() / (dr * dz)
+        total = float((phi * vol * mask).sum())
+        q_inj += p * phi * vol / total
 
     n = int(mask.sum())
     idx = -np.ones_like(mask, dtype=np.int64)
     idx[mask] = np.arange(n)
-    rows, cols, vals, b = [], [], [], np.zeros(n)
-    T_INF_ = T_INF
+    rows, cols, vals = [], [], []
+    b = np.zeros(n)
 
-    def add(i, j, g, rhs_contribution):
-        rows.append(i); cols.append(j); vals.append(g)
+    def k_harm(a, b_):
+        return 2.0 / (1.0 / a + 1.0 / b_)
 
-    II, JJ = np.meshgrid(np.arange(nz), np.arange(nr), indexing="ij")
     for jz in range(nz):
         for jr in range(nr):
             if not mask[jz, jr]:
                 continue
             i = idx[jz, jr]
             diag = 0.0
-            # -r neighbour (axis: symmetry, no flux)
-            if jr > 0:
-                nb = idx[jz, jr - 1]
-                if nb >= 0:
-                    g = 2.0 / (1.0 / (k_cell[jz, jr] * dr * dz)
-                               + 1.0 / (k_cell[jz, jr - 1] * dr * dz)) / dr
-                    add(i, nb, -g, 0.0)
-                    diag += g
-            # +r neighbour or Robin on the outer shell
+            r_face_in = r_edges[jr]
+            r_face_out = r_edges[jr + 1]
+            # -r face: axis (zero area) or neighbour
+            if jr > 0 and mask[jz, jr - 1]:
+                g = k_harm(k_cell[jz, jr], k_cell[jz, jr - 1]) \
+                    * (2.0 * np.pi * r_face_in * dz) / dr
+                rows.append(i); cols.append(idx[jz, jr - 1]); vals.append(-g)
+                diag += g
+            # +r face: neighbour or Robin on the outer shell
             if jr + 1 < nr and mask[jz, jr + 1]:
-                nb = idx[jz, jr + 1]
-                g = 2.0 / (1.0 / (k_cell[jz, jr] * dr * dz)
-                           + 1.0 / (k_cell[jz, jr + 1] * dr * dz)) / dr
-                add(i, nb, -g, 0.0)
+                g = k_harm(k_cell[jz, jr], k_cell[jz, jr + 1]) \
+                    * (2.0 * np.pi * r_face_out * dz) / dr
+                rows.append(i); cols.append(idx[jz, jr + 1]); vals.append(-g)
                 diag += g
             else:
-                diag += H_EFF * dz * 1.0      # Robin, per unit depth
-                b[i] += H_EFF * dz * 1.0 * T_INF_
-            # -z neighbour or Robin at the bottom plate
+                a_ro = H_EFF * (2.0 * np.pi * r_face_out * dz)
+                diag += a_ro
+                b[i] += a_ro * T_INF
+            # -z face: neighbour or Robin at the bottom plate
             if jz > 0 and mask[jz - 1, jr]:
-                nb = idx[jz - 1, jr]
-                g = 2.0 / (1.0 / (k_cell[jz, jr] * dr * 1.0)
-                           + 1.0 / (k_cell[jz - 1, jr] * dr * 1.0)) / dz
-                add(i, nb, -g, 0.0)
+                g = k_harm(k_cell[jz, jr], k_cell[jz - 1, jr]) \
+                    * (2.0 * np.pi * rc[jr] * dr) / dz
+                rows.append(i); cols.append(idx[jz - 1, jr]); vals.append(-g)
                 diag += g
             else:
-                diag += H_EFF * dr * 1.0
-                b[i] += H_EFF * dr * 1.0 * T_INF_
-            # +z neighbour or Robin at the top
+                a_ro = H_EFF * (2.0 * np.pi * rc[jr] * dr)
+                diag += a_ro
+                b[i] += a_ro * T_INF
+            # +z face: neighbour or Robin at the top
             if jz + 1 < nz and mask[jz + 1, jr]:
-                nb = idx[jz + 1, jr]
-                g = 2.0 / (1.0 / (k_cell[jz, jr] * dr * 1.0)
-                           + 1.0 / (k_cell[jz + 1, jr] * dr * 1.0)) / dz
-                add(i, nb, -g, 0.0)
+                g = k_harm(k_cell[jz, jr], k_cell[jz + 1, jr]) \
+                    * (2.0 * np.pi * rc[jr] * dr) / dz
+                rows.append(i); cols.append(idx[jz + 1, jr]); vals.append(-g)
                 diag += g
             else:
-                diag += H_EFF * dr * 1.0
-                b[i] += H_EFF * dr * 1.0 * T_INF_
-            # volumetric source
-            b[i] += q[jz, jr] * dr * dz * 1.0
+                a_ro = H_EFF * (2.0 * np.pi * rc[jr] * dr)
+                diag += a_ro
+                b[i] += a_ro * T_INF
+            b[i] += q_inj[jz, jr]
             rows.append(i); cols.append(i); vals.append(diag)
 
     A = coo_matrix((vals, (rows, cols)), shape=(n, n)).tocsr()
@@ -128,10 +131,8 @@ def fdm_thermal(geo, nr: int = 96, nz: int = 192) -> dict:
 
 
 if __name__ == "__main__":
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import time
+
     from src.geometry import RobotGeometry, design_from_flat
     from src.optimizer import stock_design
     from src.pinn_thermal import ThermalPINN, solve_thermal, thermal_metrics
@@ -141,10 +142,12 @@ if __name__ == "__main__":
     fdm = fdm_thermal(geo)
     t1 = time.time()
     net = ThermalPINN()
-    net, _ = solve_thermal(net, geo, steps=1500)
+    net, hist = solve_thermal(net, geo, steps=3000, verbose=False)
     pin = {k: float(v.detach()) for k, v in thermal_metrics(net, geo).items()}
-    print(f"FDM  ({t1-t0:.1f}s):", fdm)
-    print(f"PINN (1500 steps):  ", pin)
+    print(f"FDM  ({t1-t0:.1f}s): ", {k: round(v, 2) for k, v in fdm.items()})
+    print(f"PINN (3000 steps):  ",
+          {k: round(v, 2) for k, v in pin.items()},
+          f"final loss {hist[-1]:.3e}")
     for k in fdm:
         if k in pin:
             print(f"{k:12s} fdm={fdm[k]:7.2f}  pinn={pin[k]:7.2f}  "

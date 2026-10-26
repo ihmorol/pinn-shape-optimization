@@ -5,8 +5,9 @@
     "name": "iter0_baseline",
     "mode": "baseline",
     "use_pinn": true,
-    "steps_init": 1200,
-    "hypothesis": "Establish the stock dtiny-like reference design and its objective value J(stock) with the full physics pipeline (stability, locomotion, packing, PINN thermal, acoustics). All later iterations are measured against this baseline."
+    "steps_init": 2500,
+    "hypothesis": "Establish the stock dtiny-like reference design and its objective value J(stock) with the full physics pipeline (stability, locomotion, packing, PINN thermal, acoustics). All later iterations are measured against this baseline.",
+    "lbfgs_init": 200
   },
   "baseline": {
     "e_flat_Jm": 0.11637292802333832,
@@ -14,7 +15,7 @@
     "cot": 0.030139723792672157,
     "min_margin_mm": 11.397683143615723,
     "tip_angle_deg": 29.074031829833984,
-    "T_max": 50.84950256347656,
+    "T_max": 54.9649772644043,
     "f_helmholtz_Hz": 2279.49853515625,
     "acoustic_pen": 12.302578926086426,
     "mass_g": 393.5896301269531,
@@ -22,17 +23,17 @@
     "pack_frac": 0.43175768852233887,
     "a_frontal_cm2": 77.26260375976562,
     "z_cm_mm": 39.56838607788086,
-    "T_pcb": 50.81956481933594,
-    "T_battery": 32.3148193359375,
-    "T_speaker": 38.55084991455078
+    "T_pcb": 53.902549743652344,
+    "T_battery": 33.54978942871094,
+    "T_speaker": 47.218223571777344
   },
   "refs": {
     "e_flat_Jm": 0.11637292802333832,
     "e_slope10_Jm": 0.7850885987281799,
     "min_margin_mm": 11.397683143615723,
-    "T_max": 50.84950256347656,
+    "T_max": 54.9649772644043,
     "acoustic_pen": 12.302578926086426
   },
   "J_stock": 1.0,
-  "wall_s_total": 27.27569556236267
+  "wall_s_total": 68.59628391265869
 }

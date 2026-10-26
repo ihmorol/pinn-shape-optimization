@@ -2,6 +2,7 @@
   "name": "iter0_baseline",
   "mode": "baseline",
   "use_pinn": true,
-  "steps_init": 1200,
-  "hypothesis": "Establish the stock dtiny-like reference design and its objective value J(stock) with the full physics pipeline (stability, locomotion, packing, PINN thermal, acoustics). All later iterations are measured against this baseline."
+  "steps_init": 2500,
+  "hypothesis": "Establish the stock dtiny-like reference design and its objective value J(stock) with the full physics pipeline (stability, locomotion, packing, PINN thermal, acoustics). All later iterations are measured against this baseline.",
+  "lbfgs_init": 200
 }

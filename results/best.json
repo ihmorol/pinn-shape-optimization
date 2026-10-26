@@ -1,6 +1,7 @@
 {
   "name": "iter1_geomopt_fast",
   "J_opt": 0.8277875185012817,
+  "basis": "proxy",
   "improvement_pct": 17.221248149871826,
   "params": {
     "r0": 32.91526794433594,
