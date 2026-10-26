@@ -1,0 +1,151 @@
+"""Independent finite-volume solver for the same thermal problem.
+
+Cell-centred FV discretisation of
+    k Laplacian(T) + q''' = 0   with Robin -k dT/dn = h (T - T_inf)
+on the same (r, z) half cross-section, with a staircase approximation of the
+spline boundary (documented error source; fine grids keep it small). Used to
+verify the PINN field solution - the optimizer's gradients are only as
+trustworthy as the field solver.
+"""
+from __future__ import annotations
+
+import numpy as np
+import torch
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import spsolve
+
+from .pinn_thermal import (H_EFF, K_CAV, K_PLA, SOURCES, T_INF, W_DEPTH,
+                           _source_z)
+from .geometry import profile_radius
+
+
+def _profile_np(geo, n: int = 512):
+    s = torch.linspace(0, 1, n)
+    with torch.no_grad():
+        r = profile_radius(s, geo.r_ctrl).numpy() * 1e-3
+        r_in = (profile_radius(s, geo.r_ctrl) - geo.t).clamp(min=2.5).numpy() \
+            * 1e-3
+        z = (float(geo.clr) + s.numpy() * float(geo.H)) * 1e-3
+    return z, r, r_in
+
+
+def fdm_thermal(geo, nr: int = 96, nz: int = 192) -> dict:
+    """Solve the thermal field with finite volumes; returns metric dict."""
+    z_p, r_p, r_in_p = _profile_np(geo)
+    z_lo, z_hi = z_p[0], z_p[-1]
+    r_max = r_p.max() * 1.001
+    r_edges = np.linspace(0.0, r_max, nr + 1)
+    z_edges = np.linspace(z_lo, z_hi, nz + 1)
+    dr = r_edges[1] - r_edges[0]
+    dz = z_edges[1] - z_edges[0]
+    rc = 0.5 * (r_edges[:-1] + r_edges[1:])
+    zc = 0.5 * (z_edges[:-1] + z_edges[1:])
+    r_at_z = np.interp(zc, z_p, r_p)
+    r_in_at_z = np.interp(zc, z_p, r_in_p)
+    mask = rc[None, :] <= r_at_z[:, None]          # (nz, nr)
+    is_wall = rc[None, :] > r_in_at_z[:, None]
+    k_cell = np.where(is_wall, K_PLA, K_CAV)
+
+    # sources, normalised over the masked half domain (same measure as PINN)
+    q = np.zeros_like(k_cell)
+    RR, ZZ = np.meshgrid(rc, zc)
+    for _, p, r_off, sr, sz, key in SOURCES:
+        z_c = float(_source_z(key, geo))
+        phi = np.exp(-(((RR - r_off) / sr) ** 2) - (((ZZ - z_c) / sz) ** 2))
+        phi[~mask] = 0.0
+        q += (p / 2.0 / W_DEPTH) * phi / phi.sum() / (dr * dz)
+
+    n = int(mask.sum())
+    idx = -np.ones_like(mask, dtype=np.int64)
+    idx[mask] = np.arange(n)
+    rows, cols, vals, b = [], [], [], np.zeros(n)
+    T_INF_ = T_INF
+
+    def add(i, j, g, rhs_contribution):
+        rows.append(i); cols.append(j); vals.append(g)
+
+    II, JJ = np.meshgrid(np.arange(nz), np.arange(nr), indexing="ij")
+    for jz in range(nz):
+        for jr in range(nr):
+            if not mask[jz, jr]:
+                continue
+            i = idx[jz, jr]
+            diag = 0.0
+            # -r neighbour (axis: symmetry, no flux)
+            if jr > 0:
+                nb = idx[jz, jr - 1]
+                if nb >= 0:
+                    g = 2.0 / (1.0 / (k_cell[jz, jr] * dr * dz)
+                               + 1.0 / (k_cell[jz, jr - 1] * dr * dz)) / dr
+                    add(i, nb, -g, 0.0)
+                    diag += g
+            # +r neighbour or Robin on the outer shell
+            if jr + 1 < nr and mask[jz, jr + 1]:
+                nb = idx[jz, jr + 1]
+                g = 2.0 / (1.0 / (k_cell[jz, jr] * dr * dz)
+                           + 1.0 / (k_cell[jz, jr + 1] * dr * dz)) / dr
+                add(i, nb, -g, 0.0)
+                diag += g
+            else:
+                diag += H_EFF * dz * 1.0      # Robin, per unit depth
+                b[i] += H_EFF * dz * 1.0 * T_INF_
+            # -z neighbour or Robin at the bottom plate
+            if jz > 0 and mask[jz - 1, jr]:
+                nb = idx[jz - 1, jr]
+                g = 2.0 / (1.0 / (k_cell[jz, jr] * dr * 1.0)
+                           + 1.0 / (k_cell[jz - 1, jr] * dr * 1.0)) / dz
+                add(i, nb, -g, 0.0)
+                diag += g
+            else:
+                diag += H_EFF * dr * 1.0
+                b[i] += H_EFF * dr * 1.0 * T_INF_
+            # +z neighbour or Robin at the top
+            if jz + 1 < nz and mask[jz + 1, jr]:
+                nb = idx[jz + 1, jr]
+                g = 2.0 / (1.0 / (k_cell[jz, jr] * dr * 1.0)
+                           + 1.0 / (k_cell[jz + 1, jr] * dr * 1.0)) / dz
+                add(i, nb, -g, 0.0)
+                diag += g
+            else:
+                diag += H_EFF * dr * 1.0
+                b[i] += H_EFF * dr * 1.0 * T_INF_
+            # volumetric source
+            b[i] += q[jz, jr] * dr * dz * 1.0
+            rows.append(i); cols.append(i); vals.append(diag)
+
+    A = coo_matrix((vals, (rows, cols)), shape=(n, n)).tocsr()
+    T = spsolve(A.tocsc(), b)
+    Tf = np.full(mask.shape, np.nan)
+    Tf[mask] = T
+
+    out = {"T_max": float(np.nanmax(Tf))}
+    for name, _, r_off, _, _, key in SOURCES:
+        z_c = float(_source_z(key, geo))
+        jz = int(np.clip(np.searchsorted(zc, z_c), 0, nz - 1))
+        jr = int(np.clip(np.searchsorted(rc, r_off), 0, nr - 1))
+        out[f"T_{name}"] = float(Tf[jz, jr])
+    return out
+
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import time
+    from src.geometry import RobotGeometry, design_from_flat
+    from src.optimizer import stock_design
+    from src.pinn_thermal import ThermalPINN, solve_thermal, thermal_metrics
+
+    geo = RobotGeometry(design_from_flat(stock_design()))
+    t0 = time.time()
+    fdm = fdm_thermal(geo)
+    t1 = time.time()
+    net = ThermalPINN()
+    net, _ = solve_thermal(net, geo, steps=1500)
+    pin = {k: float(v.detach()) for k, v in thermal_metrics(net, geo).items()}
+    print(f"FDM  ({t1-t0:.1f}s):", fdm)
+    print(f"PINN (1500 steps):  ", pin)
+    for k in fdm:
+        if k in pin:
+            print(f"{k:12s} fdm={fdm[k]:7.2f}  pinn={pin[k]:7.2f}  "
+                  f"diff={100*(pin[k]-fdm[k])/fdm[k]:+5.1f}%")

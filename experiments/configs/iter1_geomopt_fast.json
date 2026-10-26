@@ -1,0 +1,13 @@
+{
+  "name": "iter1_geomopt_fast",
+  "mode": "optimize",
+  "use_pinn": false,
+  "seeds": [0],
+  "outer_steps": 120,
+  "lr": 0.06,
+  "mu0": 2.0,
+  "mu_end": 60.0,
+  "noise": 0.10,
+  "init": "perturb",
+  "hypothesis": "Geometry + mass co-optimization with fast physics only (stability, locomotion, packing, acoustics, lumped thermal proxy) already improves the scalar objective substantially: the optimizer should flatten the crown, slim the upper body, drop the battery to the floor and widen the track for tipover margin, while shrinking shell volume for mass/energy."
+}
