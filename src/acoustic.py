@@ -2,7 +2,7 @@
 
 The head cavity above the speaker baffle acts as a Helmholtz resonator:
 
-    f_H = (c / 2 pi) sqrt(A_port / (V L_eff)),  L_eff = t_baffle + 0.85 r_port
+    f_H = (c / 2 pi) sqrt(A_port / (V L_eff)),  L_eff = 2 t + 0.85 r_port
 
 Speech-band tuning penalty: the resonance should sit near the vocal-cavity
 warmth band (~520 Hz) rather than inside the sibilance band, and the cavity

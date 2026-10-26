@@ -1,18 +1,28 @@
 """Shape-conditioned physics-informed neural network for the thermal field.
 
-Steady-state AXISYMMETRIC heat conduction on the meridian half-plane (r >= 0):
+Steady-state AXISYMMETRIC heat conduction on the meridian half-plane (r >= 0),
+in divergence form:
 
-    k ( T_rr + T_r / r + T_zz ) + Q''' = 0        inside the body
+    div(k grad T) + Q''' = 0
+      = k ( T_rr + T_r / r + T_zz ) + grad(k) . grad(T) + Q'''    inside
     -k dT/dn = h_eff (T - T_inf)                  on the outer surface
     dT/dr = 0                                     on the symmetry axis
+
+The grad(k).grad(T) interface term is mandatory: omitting it turns the
+wall/cavity interface into an unconstrained flux source/sink and the field
+violates global energy conservation while the pointwise loss stays small
+(found by verification against src/verify_fdm.py).
 
 Heat sources are axisymmetric rings normalized by integral over the meridian
 plane weighted by 2 pi r, so integral Q''' 2 pi r dr dz = P_i exactly. The
 domain is parameterized by the profile spline: collocation points live in a
-fixed reference square (rho, s) and are mapped by r = rho * r(s), so the PDE
-residual is differentiable with respect to the design vector. The 1/r term is
-evaluated with r clamped at R_AXIS_MIN (collocation is kept outside a thin
-axis cylinder, and a symmetry loss enforces dT/dr = 0 at the axis).
+fixed reference square (rho, s) and are mapped by r = rho * r(s) over the
+FULL radius including the axis, so the residual is differentiable with
+respect to the design vector and no region is unconstrained. Below
+R_AXIS_MIN the residual uses the limit form 2 k T_rr (the T_r/r -> T_rr
+axis limit). Source-biased (30%) and RAR residual-guided sampling keep
+accuracy where the sources are; the residual loss is volume-weighted so the
+MSE approximates the domain integral.
 
 The network is warm-started across outer optimization iterations
 (continuation). The same formulation is solved independently by
@@ -146,9 +156,6 @@ def _collocation(n: int, geo, dtype=torch.float32, src_frac: float = 0.3):
             rho_b[m] = rho_i
     rho = torch.cat([rho_u, rho_b], dim=0)
     s = torch.cat([s_u, s_b], dim=0)
-    r_m = (rho * _r_profile_m(s, geo)).requires_grad_(True)
-    z_m = (geo.clr * 1e-3 + s * geo.H * 1e-3).requires_grad_(True)
-    return r_m, z_m, s
     r_m = (rho * _r_profile_m(s, geo)).requires_grad_(True)
     z_m = (geo.clr * 1e-3 + s * geo.H * 1e-3).requires_grad_(True)
     return r_m, z_m, s

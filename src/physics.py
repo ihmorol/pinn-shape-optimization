@@ -19,6 +19,8 @@ import math
 
 import torch
 
+from .geometry import N_GRID
+
 G = 9.81                    # m/s^2
 RHO_AIR = 1.2               # kg/m^3
 C_D = 0.95                  # bluff rounded shell
@@ -103,5 +105,13 @@ def packing_and_fit(geo) -> dict:
         "total_width": softplus_sq(geo.d["wt"] + 16.0 - 110.0),
         "wheel_vs_body": softplus_sq(geo.d["clr"] + 2.0 - geo.d["rw"]),
     }
+    # spline overshoot control (manufacturability): the natural spline can
+    # oscillate between control points; cap the second derivative of the
+    # profile. Stock ~970, the unconstrained optimum reached ~3100 (wiggle).
+    ds2 = float(N_GRID) ** 2
+    r_ss = (geo.r_grid[2:] - 2.0 * geo.r_grid[1:-1]
+            + geo.r_grid[:-2]) * ds2
+    pens["profile_curvature"] = softplus_sq((r_ss.abs().max() - 1500.0)
+                                            / 300.0)
     pens["pack_frac"] = pack_frac  # report even though not a penalty itself
     return pens

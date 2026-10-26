@@ -16,7 +16,35 @@
     "wall_s": 6.523043870925903
   },
   "iter2_pinn_coopt": {
-    "status": "failed",
-    "wall_s": 320.0696392059326
+    "status": "optimize",
+    "accepted": true,
+    "basis": "pinn",
+    "J_opt": 0.8498654961585999,
+    "improvement_pct": 15.013450384140015,
+    "wall_s": 513.8667604923248
+  },
+  "iter3_fdm_crossval": {
+    "status": "optimize",
+    "accepted": false,
+    "basis": "pinn",
+    "J_opt": null,
+    "improvement_pct": null,
+    "wall_s": 69.6012077331543
+  },
+  "iter4_multiseed": {
+    "status": "optimize",
+    "accepted": false,
+    "basis": "pinn",
+    "J_opt": 0.980060338973999,
+    "improvement_pct": 1.9939661026000977,
+    "wall_s": 670.9972953796387
+  },
+  "iter5_smooth": {
+    "status": "optimize",
+    "accepted": false,
+    "basis": "pinn",
+    "J_opt": 0.9094074368476868,
+    "improvement_pct": 9.059256315231323,
+    "wall_s": 538.2996475696564
   }
 }

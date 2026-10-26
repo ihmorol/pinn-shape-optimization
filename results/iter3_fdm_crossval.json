@@ -1,0 +1,36 @@
+{
+  "name": "iter3_fdm_crossval",
+  "hypothesis": "Certification experiment: the shape-conditioned PINN field solution on the OPTIMIZED design agrees with the independent annular finite-volume solver within a few percent for every thermal metric, and the FDM-certified T_max reduction (optimized vs stock) confirms the optimization gain was physical, not a PINN artifact.",
+  "config": {
+    "name": "iter3_fdm_crossval",
+    "mode": "crossval",
+    "use_pinn": true,
+    "steps_final": 2500,
+    "lbfgs_final": 250,
+    "hypothesis": "Certification experiment: the shape-conditioned PINN field solution on the OPTIMIZED design agrees with the independent annular finite-volume solver within a few percent for every thermal metric, and the FDM-certified T_max reduction (optimized vs stock) confirms the optimization gain was physical, not a PINN artifact."
+  },
+  "design": "iter2_pinn_coopt",
+  "crossval_optimized": {
+    "fdm": {
+      "T_max": 54.64008056661672,
+      "T_pcb": 53.61178007506045,
+      "T_battery": 37.362744953316984,
+      "T_speaker": 43.716676133757154
+    },
+    "pinn": {
+      "T_max": 52.95600128173828,
+      "T_cav_mean": 39.645965576171875,
+      "T_pcb": 52.061317443847656,
+      "T_battery": 33.604881286621094,
+      "T_speaker": 41.90354919433594
+    },
+    "diff_pct": {
+      "T_max": -3.0821317747239063,
+      "T_pcb": -2.8920185620437024,
+      "T_battery": -10.05778261578791,
+      "T_speaker": -4.14744921108299
+    }
+  },
+  "crossval_stock_fdm_T_max": 56.27500493679444,
+  "wall_s_total": 66.4441602230072
+}

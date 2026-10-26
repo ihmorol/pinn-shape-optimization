@@ -26,11 +26,11 @@ evaluated with the same pipeline, so $J(\theta_0) \approx \sum w_i$ for the
 feasible stock design. Weights: $w_E{=}0.25, w_S{=}0.15, w_{st}{=}0.25,
 w_T{=}0.20, w_A{=}0.15$.
 
-The design vector (16 parameters, all bounded in a manufacturable box):
+The design vector (15 parameters, all bounded in a manufacturable box):
 
 | group | parameters | bounds |
 |---|---|---|
-| profile control radii $r_0..r_6$ | 7 splines knots at fixed heights $s_i$ | 8–45 mm |
+| profile control radii $r_0..r_6$ | 7 spline knots at fixed heights $s_i$ | $r_0..r_5$: 10–45 mm, $r_6$: 8–35 mm |
 | body height $H$ | 1 | 85–135 mm |
 | wall thickness $t$ | 1 | 1.6–3.2 mm |
 | wheel radius $r_w$, track width $w_t$ | 2 | 10–20 mm, 34–96 mm |
@@ -97,8 +97,14 @@ $\mathrm{CoT} = E/(Mg)$.
 **Packing and fit.** Component volumes (density-adjusted) must fit in
 $\le 55\%$ of $V_{cav}$; the battery/PCB/speaker need radial room at their
 heights ($r(s)-t \ge$ half-width + margin); minimum cavity radius
-$r - t \ge 6$ mm; total width $\le 110$ mm. All are smooth one-sided
-penalties $\mathrm{softplus}(v/s)^2 \cdot 10^{-6}$ (zero when feasible).
+$r - t \ge 6$ mm; total width $\le 110$ mm; wheel radius vs. clearance
+($c + 2 \le r_w$); a stability floor ($S \ge 10$ mm, enforced in the
+objective); and a **profile-curvature cap** — the natural spline can
+oscillate between control points (the unconstrained optimum reached
+$\max|r''| \approx 3100$ vs. the stock profile's $\approx 970$, a visible
+manufacturability wiggle), so $\max |r''| \le 1500$ is penalized. All
+constraints are smooth one-sided penalties
+$\mathrm{softplus}(v/s)^2 \cdot 10^{-6}$ (zero when feasible).
 
 ## 4. Thermal field: shape-conditioned PINN (the core novelty)
 
@@ -189,11 +195,16 @@ validate it against adjoints).
 finite volumes** (volumes $2\pi r_c\,\Delta r\,\Delta z$, harmonic-mean face
 conductances, Robin faces at the staircase boundary, natural symmetry at
 $r=0$), solved exactly with a sparse direct solver in ~0.2 s. On the stock
-design the PINN (2 500 Adam + 200 L-BFGS) reproduces the FV field to
-$|\Delta T| \le 1.7\%$ for $T_{\max}$/$T_{pcb}$/$T_{spk}$ and $\le 5.7\%$
-for the small battery blob — see `results/` for the current numbers. The
-PINN's role is to make the field differentiable w.r.t. shape inside the
-optimization loop; the FV solver certifies its accuracy.
+design (2 500 Adam + 250 L-BFGS; saved as `results/verify_stock.json`) the
+PINN reproduces the FV field to $-2.0\%$ ($T_{\max}$), $-1.9\%$
+($T_{pcb}$), $-3.1\%$ ($T_{spk}$) and $-5.9\%$ (the small battery blob); on
+the optimized design (`results/iter3_fdm_crossval.json`) the agreement is
+$-3.1\%$ / $-2.9\%$ / $-4.1\%$ / $-10.1\%$ respectively. The PINN
+consistently under-reads by a few percent (tightest near narrow sources);
+the FV solver is the reference and every headline thermal claim in this
+work is FDM-certified. The PINN's role is to make the field differentiable
+w.r.t. shape inside the optimization loop; the FV solver certifies its
+accuracy.
 
 ## 5. Acoustics: speaker-cavity tuning (closed model)
 
@@ -215,11 +226,14 @@ upgrade will be compared against.
 
 ## 6. Outer optimizer
 
-Adam on $x$ (the unconstrained 16-vector), lr 0.05–0.06, with:
-- **penalty continuation**: $\mu(t) = \mu_0 (\mu_1/\mu_0)^{t/T}$, 2 → 60;
+Adam on $x$ (the unconstrained 15-vector), lr 0.05–0.06, with:
+- **penalty continuation**: $\mu(t) = \mu_0 (\mu_1/\mu_0)^{t/T}$, 2 → 120
+  (config-dependent);
 - **feasibility-tracked best**: the best design is the lowest
   penalty-free $J$ among outer iterations with total penalty below
-  $5\cdot10^{-3}$ (a feasible candidate, not the raw trajectory minimum);
+  $5\cdot10^{-3}$; if no iteration reaches feasibility, the design with
+  the lowest $J + 100\,P$ is used and flagged infeasible (its
+  `pack_frac` may exceed the target by a few percent — reported).
 - multi-seed restarts (configurable; each seed perturbs the stock design by
   $\sigma = 0.1$ in logit space, or explores uniformly);
 - final re-evaluation of the winner with a fresh full-length PINN solve.

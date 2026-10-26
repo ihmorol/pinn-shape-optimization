@@ -1,0 +1,16 @@
+{
+  "name": "iter5_smooth",
+  "mode": "optimize",
+  "use_pinn": true,
+  "seeds": [0],
+  "outer_steps": 80,
+  "steps_init": 1500,
+  "steps_warm": 200,
+  "steps_final": 2500,
+  "lr": 0.05,
+  "mu0": 2.0,
+  "mu_end": 120.0,
+  "noise": 0.10,
+  "init": "perturb",
+  "hypothesis": "Manufacturability refinement: figure analysis of the it2 winner exposed spline overshoot (max |r''| = 3114 vs stock 973 - a wiggle between control points). Adding a profile-curvature penalty (cap 1500) should produce a smooth, printable profile at a small objective cost (<2%), closing the loop from figure diagnostics back into the constraint set - the auto-research loop improving its own design rules."
+}

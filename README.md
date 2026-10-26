@@ -28,13 +28,23 @@ residuals are differentiable with respect to the shape.
 
 See [docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md) for the full audited trail
 (Karpathy-style: each iteration = hypothesis → experiment → keep only if
-better).
+better). Note the PINN field solve is stochastic at the ~0.5 °C level
+(stock T_max: 54.96 vs 54.32 across full re-runs) — treat third decimals as
+noise; the finite-volume solver is the deterministic reference.
 
-| Iteration | Change | J (lower better) | Basis |
-|---|---|---|---|
-| iter0 | stock dtiny-like reference | 1.000 | pinn |
-| iter1 | geometry + mass co-opt (fast physics) | 0.828 (+17.2%) | proxy |
-| iter2 | PINN thermal in the outer loop | see log | pinn |
+| run | basis | J (lower better) | ΔJ | note |
+|---|---|---|---|---|
+| iter0 stock (reference) | pinn | 1.0000 | — | T_max 55.0 °C (PINN) / 56.3 °C (FV) |
+| iter1 geometry+mass co-opt | proxy | 0.8278 | +17.2% | fast physics only, 120 outer steps |
+| iter2 PINN in the outer loop | pinn | **0.8499** | **+15.0%** | mass −12%, margin +24%, energy −11% |
+| iter3 FDM certification | fdm | — | — | optimized T_max 54.6 °C vs stock 56.3 °C (finite volume) |
+| iter4 multi-seed probe | pinn | 0.9801 | +2.0% | fresh seeds σ=0.15 don't beat seed-0 at this budget (honest) |
+| iter5 smoothness-constrained | pinn | 0.9094 | +9.1% | curvature cap (max r'' 3114→1246); structural gains kept, acoustic tuning traded |
+
+Verification (stock design, `results/verify_stock.json`): PINN vs
+finite-volume T_max −2.0%, T_pcb −1.9%, T_speaker −3.1%, T_battery −5.9%.
+On the optimized design (`results/iter3_fdm_crossval.json`): −3.1% /
+−2.9% / −4.1% / −10.1%.
 
 ## Repository layout
 
@@ -68,7 +78,9 @@ paper/                   draft manuscript
 pip install -r requirements.txt
 python experiments/autoresearch_loop.py          # run all pending iterations
 python experiments/autoresearch_loop.py --list   # show registry
-python src/verify_fdm.py                         # PINN vs finite-volume check
+python -m src.verify_fdm                         # PINN vs finite-volume check
+python experiments/make_figures.py               # publication figures
+python experiments/final_table.py                # consolidated results table
 ```
 
 ## Status

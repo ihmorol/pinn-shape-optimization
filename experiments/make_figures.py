@@ -56,39 +56,44 @@ def _best_params():
 
 
 def fig_profiles():
-    base = _load("iter0_baseline")
     theta_b = stock_design().numpy()
     theta_o = _best_params()
     if theta_o is None:
         print("no best design yet, skipping profiles")
         return
+    rc_b = torch.tensor(theta_b[:7], dtype=torch.float32)
+    rc_o = torch.tensor(theta_o[:7], dtype=torch.float32)
     s = torch.linspace(0, 1, 200)
-    r_b, dr_b = profile_radius(s, torch.tensor(theta_b, dtype=torch.float32),
-                               with_deriv=True)
-    r_o, _ = profile_radius(s, torch.tensor(theta_o, dtype=torch.float32),
-                            with_deriv=True)
+    r_b, _ = profile_radius(s, rc_b, with_deriv=True)
+    r_o, _ = profile_radius(s, rc_o, with_deriv=True)
     zb = float(theta_b[7])
     zo = float(theta_o[7])
+    # optional: smooth-constrained variant (iter5) if present
+    theta_s, rc_s, zs = None, None, None
+    it5 = _load("iter5_smooth")
+    if it5 and "params" in it5:
+        theta_s = [it5["params"][k] for k in PARAM_NAMES]
+        rc_s = torch.tensor(theta_s[:7], dtype=torch.float32)
+        zs = float(theta_s[7])
     fig, ax = plt.subplots(figsize=(3.25, 2.9))
-    for r, z, c, lbl in [(r_b, zb, C_STOCK, "stock"),
-                         (r_o, zo, C_OPT, "PhORM optimized")]:
+    entries = [(r_b, zb, C_STOCK, "stock", "-")]
+    if theta_s is not None:
+        entries.append((profile_radius(s, rc_s), zs, "#264653",
+                        "smoothness-constrained", "--"))
+    entries.append((r_o, zo, C_OPT, "unconstrained optimum", "-"))
+    for r, z, c, lbl, ls in entries:
         zz = z * s.numpy()
-        ax.fill_betweenx(zz, -r.numpy(), r.numpy(), color=c, alpha=0.18,
-                         lw=0)
-        ax.plot(r.numpy(), zz, color=c, label=lbl)
-        ax.plot(-r.numpy(), zz, color=c)
-    sc = torch.tensor(theta_o, dtype=torch.float32)[None, :7] \
-        .repeat(s.shape[0] // 7 + 1, 1).flatten()[:7]
-    s_knots = torch.tensor([0.0, 0.15, 0.32, 0.52, 0.72, 0.88, 1.0])
-    r_k, _ = profile_radius(s_knots, torch.tensor(theta_o,
-                                                  dtype=torch.float32),
-                            with_deriv=True)
-    ax.plot(r_k.numpy(), zo * s_knots.numpy(), "o", ms=4, color=C_OPT,
+        ax.plot(r.numpy(), zz, color=c, label=lbl, ls=ls)
+        ax.plot(-r.numpy(), zz, color=c, ls=ls)
+    r_k, _ = profile_radius(torch.tensor([0.0, 0.15, 0.32, 0.52, 0.72,
+                                          0.88, 1.0]), rc_o, with_deriv=True)
+    ax.plot(r_k.numpy(), zo * np.array([0.0, 0.15, 0.32, 0.52, 0.72,
+                                        0.88, 1.0]), "o", ms=4, color=C_OPT,
             zorder=5, label="control points")
     ax.set_xlabel("radius r (mm)")
     ax.set_ylabel("height z (mm)")
     ax.set_aspect("equal")
-    ax.legend(loc="upper right")
+    ax.legend(loc="upper right", fontsize=7)
     ax.set_title("Meridian profile: stock vs optimized")
     for ext in ["pdf", "png"]:
         fig.savefig(OUT / f"fig_profiles.{ext}")
@@ -195,11 +200,13 @@ def fig_thermal_field():
             rn = (r_m / 0.06)
             dT = net.net(torch.stack([rn, zn], dim=-1)).squeeze(-1) * 15.0
         T = 25.0 + dT.numpy()
-        zz = (geo.clr + ss.squeeze(-1).numpy() * float(geo.H))
+        zz1d = (geo.clr + ss.squeeze(-1).numpy() * float(geo.H))
         rr = r_m.numpy() * 1e3
-        im = ax.contourf(rr, zz, T, levels=18, cmap="inferno")
+        ZZ = np.broadcast_to(zz1d[:, None], rr.shape)
+        im = ax.contourf(rr, ZZ, T, levels=18, cmap="inferno")
         ax.plot(np.concatenate([rr[:, -1], -rr[::-1, -1]]),
-                np.concatenate([zz, zz[::-1]]), color="white", lw=1.2)
+                np.concatenate([ZZ[:, -1], ZZ[::-1, -1]]), color="white",
+                lw=1.2)
         ax.set_title(f"{lbl}  ($T_{{max}}$={T.max():.1f} °C)")
         ax.set_xlabel("r (mm)")
         ax.set_aspect("equal")

@@ -76,7 +76,8 @@ def run_pending(only: str | None = None):
             continue
         res = load_json(RES_DIR / f"{name}.json", {})
         j_opt = res.get("J_opt")
-        status = "baseline" if cfg.get("mode") == "baseline" else "optimize"
+        mode = cfg.get("mode", "optimize")
+        status = mode if mode in ("baseline", "crossval") else "optimize"
         # the metric basis (pinn vs lumped proxy) must match to compare J
         basis = "pinn" if cfg.get("use_pinn", True) else "proxy"
         accepted = False
@@ -96,9 +97,19 @@ def run_pending(only: str | None = None):
 
         base = res.get("baseline", {})
         opt = res.get("optimized", {})
-        lines = [f"\n## {name} — {'ACCEPTED (new best)' if accepted else ('REJECTED' if status == 'optimize' else 'BASELINE')}"]
-        lines.append(f"- Hypothesis: {cfg.get('hypothesis', '-')}")
-        if status == "optimize":
+        if status == "crossval":
+            lines = [f"\n## {name} — CERTIFICATION"]
+            lines.append(f"- Hypothesis: {cfg.get('hypothesis', '-')}")
+            cv = res.get("crossval_optimized", {})
+            for k, d in cv.get("diff_pct", {}).items():
+                lines.append(f"- {k}: fdm={cv['fdm'][k]:.2f} "
+                             f"pinn={cv['pinn'][k]:.2f} ({d:+.1f}%)")
+            lines.append(f"- FDM-certified T_max: stock "
+                         f"{res.get('crossval_stock_fdm_T_max'):.2f} C -> "
+                         f"optimized {cv.get('fdm', {}).get('T_max', float('nan')):.2f} C")
+        elif status == "optimize":
+            lines = [f"\n## {name} — {'ACCEPTED (new best)' if accepted else 'REJECTED'}"]
+            lines.append(f"- Hypothesis: {cfg.get('hypothesis', '-')}")
             lines.append(f"- J (basis={basis}): {res.get('J_stock'):.4f} "
                          f"(stock) -> {j_opt:.4f}  "
                          f"({res.get('improvement_pct'):+.1f}%)"
@@ -108,6 +119,8 @@ def run_pending(only: str | None = None):
             lines.append(f"- seed {res.get('best_seed')} @ iter "
                          f"{res.get('best_iter')}, wall {reg[name]['wall_s']:.0f}s")
         else:
+            lines = [f"\n## {name} — BASELINE"]
+            lines.append(f"- Hypothesis: {cfg.get('hypothesis', '-')}")
             lines.append(f"- stock reference metrics (basis={basis}): "
                          f"{fmt_metrics(base)}")
             lines.append(f"- J(stock) = {res.get('J_stock'):.4f}")

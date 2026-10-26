@@ -131,6 +131,7 @@ def fdm_thermal(geo, nr: int = 96, nz: int = 192) -> dict:
 
 
 if __name__ == "__main__":
+    import json
     import time
 
     from src.geometry import RobotGeometry, design_from_flat
@@ -142,13 +143,20 @@ if __name__ == "__main__":
     fdm = fdm_thermal(geo)
     t1 = time.time()
     net = ThermalPINN()
-    net, hist = solve_thermal(net, geo, steps=3000, verbose=False)
+    net, hist = solve_thermal(net, geo, steps=2500, lbfgs_steps=250)
     pin = {k: float(v.detach()) for k, v in thermal_metrics(net, geo).items()}
+    diffs = {k: 100.0 * (pin[k] - fdm[k]) / fdm[k]
+             for k in fdm if k in pin}
+    out = {"design": "stock", "fdm": fdm, "pinn": pin, "diff_pct": diffs,
+           "fdm_wall_s": t1 - t0, "pinn_final_loss": hist[-1]}
     print(f"FDM  ({t1-t0:.1f}s): ", {k: round(v, 2) for k, v in fdm.items()})
-    print(f"PINN (3000 steps):  ",
+    print(f"PINN (2500+250):    ",
           {k: round(v, 2) for k, v in pin.items()},
           f"final loss {hist[-1]:.3e}")
     for k in fdm:
         if k in pin:
             print(f"{k:12s} fdm={fdm[k]:7.2f}  pinn={pin[k]:7.2f}  "
                   f"diff={100*(pin[k]-fdm[k])/fdm[k]:+5.1f}%")
+    (Path(__file__).resolve().parents[1] / "results"
+     / "verify_stock.json").write_text(json.dumps(out, indent=2))
+    print("saved results/verify_stock.json")
