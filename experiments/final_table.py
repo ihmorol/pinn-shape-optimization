@@ -7,7 +7,8 @@ REPO = Path(__file__).resolve().parents[1]
 RES = REPO / "results"
 
 ORDER = ["iter0_baseline", "iter1_geomopt_fast", "iter2_pinn_coopt",
-         "iter3_fdm_crossval", "iter4_multiseed", "iter5_smooth"]
+         "iter3_fdm_crossval", "iter4_multiseed", "iter5_smooth",
+         "iter6_locomotion"]
 
 
 def load(name):

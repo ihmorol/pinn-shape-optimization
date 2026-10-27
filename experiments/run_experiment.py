@@ -67,6 +67,13 @@ def main():
     out = {"name": name, "hypothesis": cfg.get("hypothesis", ""),
            "config": cfg}
 
+    # per-config objective weights (e.g., locomotion-focused runs); note J
+    # values from runs with DIFFERENT weights are not comparable to each
+    # other - only each run's improvement over its own stock baseline is.
+    if "weights" in cfg:
+        objectives.WEIGHTS.update(cfg["weights"])
+        print(f"[{name}] objective weights: {objectives.WEIGHTS}")
+
     if cfg.get("mode") != "crossval":
         base_m, refs = evaluate_stock(use_pinn,
                                       steps=int(cfg.get("steps_init", 1200)),

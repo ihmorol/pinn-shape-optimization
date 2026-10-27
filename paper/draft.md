@@ -289,6 +289,21 @@ both reported; the choice is an engineering decision, not a hidden
 default (`results/iter5_smooth.json`, profile overlay in
 `results/plots/fig_profiles.pdf`).
 
+**iter6 (locomotion-focused re-weighting).** Re-weighting the objective
+toward movement (energy 0.35 + 10° grade 0.30 + stability 0.25; thermal
+and acoustic 0.05 each) answers "most optimized to move around": energy
+0.101 J/m flat and 0.685 J/m on the 10° ramp (−13% each), tipover margin
+14.9 mm (+31%), tip angle 38.4°, mass 343 g — the lightest, most
+stability-rich design of the campaign, with a fully feasible packing
+fraction (0.542). The shape lands in the same basin as iter5 (low, slim,
+battery at the floor) — the physics, not the weighting, picks the family;
+the weighting mostly sets how much acoustic/thermal comfort is traded.
+Note the optimizer *reduces* wheel radius (15 → 11.7 mm): in the current
+model rolling energy is radius-independent while larger wheels raise the
+drive-mass CoM and hurt stability; adding a torque/step-climbing model is
+the identified extension for wheel-size optimization
+(`results/iter6_locomotion.json`).
+
 ## 8. Limitations
 
 The thermal model is per-unit-depth axisymmetric with a lumped cavity

@@ -46,5 +46,14 @@
     "J_opt": 0.9094074368476868,
     "improvement_pct": 9.059256315231323,
     "wall_s": 538.2996475696564
+  },
+  "iter6_locomotion": {
+    "status": "optimize",
+    "accepted": false,
+    "basis": "proxy",
+    "J_opt": 0.8533501625061035,
+    "improvement_pct": 14.664983749389648,
+    "wall_s": 7.356632709503174,
+    "note": "recorded; different objective weights (locomotion) - not comparable to the pinn-basis champion (iter2)"
   }
 }

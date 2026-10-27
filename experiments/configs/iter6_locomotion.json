@@ -1,0 +1,20 @@
+{
+  "name": "iter6_locomotion",
+  "mode": "optimize",
+  "use_pinn": false,
+  "seeds": [0],
+  "outer_steps": 150,
+  "lr": 0.06,
+  "mu0": 2.0,
+  "mu_end": 80.0,
+  "noise": 0.10,
+  "init": "perturb",
+  "weights": {
+    "energy": 0.35,
+    "slope": 0.30,
+    "stability": 0.25,
+    "thermal": 0.05,
+    "acoustic": 0.05
+  },
+  "hypothesis": "Locomotion-focused re-weighting (energy 0.35 + slope 0.30 + stability 0.25, thermal/acoustic 0.05 each): 'most optimized to move around'. Expect the lightest feasible shell (mass dominates rolling and grade energy), battery pinned to the floor, widest track allowed by the width cap, and the stability floor active - i.e., a low, wide, light rover profile rather than a tall companion silhouette. Thermal weight is tiny so the lumped proxy is adequate; smoothness cap stays on for printability. NOTE: J values across different weightings are not comparable - only the improvement over this run's own stock baseline (same weights) is meaningful."
+}

@@ -18,11 +18,14 @@ clearance — against a differentiable multi-physics objective:
 | Acoustics | Helmholtz-resonator model of the speaker cavity (speech-band tuning) | minimize detuning penalty |
 | Packaging | cavity volume, component fit, printability wall thickness | hard constraints via penalties |
 
-The design vector is 16 bounded parameters mapped through a sigmoid
-(manufacturability-preserving reparameterization); the outer loop is Adam on
-the scalar objective with penalty continuation; the inner PINN solves the
-thermal field in a reference domain mapped by the profile spline, so PDE
-residuals are differentiable with respect to the shape.
+PhORM parameterizes the body by **15 bounded geometric and mass-layout
+variables** — spline control radii of the body of revolution, height, wall
+thickness, wheel geometry, battery mass and height, PCB height, ground
+clearance — mapped through a sigmoid so every design is manufacturable by
+construction. The outer loop is Adam on the scalar multi-physics objective
+with penalty continuation; the inner PINN solves the thermal field in a
+reference domain mapped by the profile spline, so PDE residuals are
+differentiable with respect to the shape. Full math: [docs/methodology.md](docs/methodology.md).
 
 ## Results so far (autoresearch loop)
 
@@ -40,11 +43,24 @@ noise; the finite-volume solver is the deterministic reference.
 | iter3 FDM certification | fdm | — | — | optimized T_max 54.6 °C vs stock 56.3 °C (finite volume) |
 | iter4 multi-seed probe | pinn | 0.9801 | +2.0% | fresh seeds σ=0.15 don't beat seed-0 at this budget (honest) |
 | iter5 smoothness-constrained | pinn | 0.9094 | +9.1% | curvature cap (max r'' 3114→1246); structural gains kept, acoustic tuning traded |
+| iter6 **locomotion-weighted** | proxy | 0.8534 | +14.7%¹ | **"most optimized to move around"**: energy −13%, ramp −13%, margin +31%, mass 343 g |
+
+¹ different objective weights (energy/slope/stability ≫ thermal/acoustic) —
+J is only comparable within a run's own stock baseline. Champion on the
+standard weighting remains iter2; the locomotion shape is
+`results/iter6_locomotion.json`.
 
 Verification (stock design, `results/verify_stock.json`): PINN vs
 finite-volume T_max −2.0%, T_pcb −1.9%, T_speaker −3.1%, T_battery −5.9%.
 On the optimized design (`results/iter3_fdm_crossval.json`): −3.1% /
 −2.9% / −4.1% / −10.1%.
+
+## Documentation map
+
+Everything is indexed and linked in [docs/INDEX.md](docs/INDEX.md) (master
+index: literature, source, experiments, results, figures, manuscript) and
+[docs/WORKFLOW.md](docs/WORKFLOW.md) (the working process and debugging
+trail). License: MIT ([LICENSE](LICENSE)).
 
 ## Repository layout
 
@@ -60,10 +76,14 @@ src/
 experiments/
   run_experiment.py      one config -> baseline + optimization -> results JSON
   autoresearch_loop.py   Karpathy-style loop: run pending, keep only improvements
+  make_figures.py        publication figures (profiles, convergence, metrics, fields)
+  final_table.py         consolidated results table (source of truth)
   configs/iter*.json     iteration hypotheses and hyperparameters
   smoke_test.py          fast-physics sanity check
   smoke_pinn.py          PINN sanity check
 docs/
+  INDEX.md               master index of every artifact (start here)
+  WORKFLOW.md            the working process and debugging trail
   RESEARCH_LOG.md        auto-generated experiment ledger
   literature_review.md   survey of the field (verified references)
   methodology.md         full mathematical formulation

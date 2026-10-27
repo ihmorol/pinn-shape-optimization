@@ -45,3 +45,11 @@
 - optimized:energy J/m=0.10  stab mm=14.11  Tmax C=53.36  f_H Hz=2337.92  acou pen=13.03  mass g=346.19  z_cm mm=31.26
 - seed 0 @ iter 79, wall 538s
 - Config: `iter5_smooth.json` (use_pinn=True, outer=80, warm=200)
+
+## iter6_locomotion — RECORDED (proxy basis; not comparable to the PINN-basis champion)
+- Hypothesis: Locomotion-focused re-weighting (energy 0.35 + slope 0.30 + stability 0.25, thermal/acoustic 0.05 each): 'most optimized to move around'. Expect the lightest feasible shell (mass dominates rolling and grade energy), battery pinned to the floor, widest track allowed by the width cap, and the stability floor active - i.e., a low, wide, light rover profile rather than a tall companion silhouette. Thermal weight is tiny so the lumped proxy is adequate; smoothness cap stays on for printability. NOTE: J values across different weightings are not comparable - only the improvement over this run's own stock baseline (same weights) is meaningful.
+- J (basis=proxy): 1.0000 (stock) -> 0.8534  (+14.7% vs its own stock baseline under locomotion weights)
+- stock:    energy J/m=0.12  stab mm=11.40  Tmax C=37.78  f_H Hz=2279.50  acou pen=12.30  mass g=393.59  z_cm mm=39.57
+- optimized:energy J/m=0.10  stab mm=14.86  Tmax C=39.39  f_H Hz=2157.05  acou pen=10.50  mass g=343.21  z_cm mm=31.22
+- seed 0 @ iter 149, wall 7s
+- Config: `iter6_locomotion.json` (use_pinn=False, outer=150, warm=None)

@@ -81,9 +81,21 @@ def run_pending(only: str | None = None):
         # the metric basis (pinn vs lumped proxy) must match to compare J
         basis = "pinn" if cfg.get("use_pinn", True) else "proxy"
         accepted = False
+        basis_note = ""
         if status == "optimize" and j_opt is not None:
-            if (best is None or best.get("basis") != basis
-                    or j_opt < best["J_opt"] - 1e-4):
+            if best is None:
+                accepted = True
+                best = {"name": name, "J_opt": j_opt, "basis": basis,
+                        "improvement_pct": res.get("improvement_pct"),
+                        "params": res.get("params")}
+                BEST.write_text(json.dumps(best, indent=2))
+            elif best.get("basis") != basis:
+                # J values under different objective weightings/physics are
+                # not comparable: record, keep the existing per-basis best,
+                # and never overwrite it silently (results/best.json must
+                # stay a meaningful "current champion" for downstream tools)
+                basis_note = " (different basis - not compared)"
+            elif j_opt < best["J_opt"] - 1e-4:
                 accepted = True
                 best = {"name": name, "J_opt": j_opt, "basis": basis,
                         "improvement_pct": res.get("improvement_pct"),
